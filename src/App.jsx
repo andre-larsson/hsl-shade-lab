@@ -52,6 +52,27 @@ function buildShades(hue, lightShade, darkShade, count) {
   })
 }
 
+function pickTone(shades, ratio) {
+  const sorted = [...shades].sort((a, b) => b.l - a.l)
+  const index = Math.round((sorted.length - 1) * ratio)
+
+  return sorted[index]
+}
+
+function buildPreviewTheme(shades) {
+  return {
+    '--preview-page': hslString(pickTone(shades, 0)),
+    '--preview-surface': hslString(pickTone(shades, 0.08)),
+    '--preview-surface-strong': hslString(pickTone(shades, 0.18)),
+    '--preview-border': hslString(pickTone(shades, 0.32)),
+    '--preview-muted': hslString(pickTone(shades, 0.56)),
+    '--preview-accent': hslString(pickTone(shades, 0.72)),
+    '--preview-accent-strong': hslString(pickTone(shades, 0.9)),
+    '--preview-text': hslString(pickTone(shades, 1)),
+    '--preview-on-accent': hslString(pickTone(shades, 0)),
+  }
+}
+
 function hslString(color) {
   return `hsl(${color.h} ${color.s}% ${color.l}%)`
 }
@@ -139,6 +160,81 @@ function ShadeControlGroup({ title, hue, shade, onChange, compact = false }) {
         />
       </div>
     </fieldset>
+  )
+}
+
+function AppPreview({ shades }) {
+  const previewTheme = useMemo(() => buildPreviewTheme(shades), [shades])
+
+  return (
+    <section className="preview-band" aria-label="App simulator preview">
+      <div className="section-heading">
+        <p className="eyebrow">Scheme preview</p>
+        <h2>App simulator</h2>
+      </div>
+
+      <div className="preview-shell" style={previewTheme}>
+        <aside className="preview-nav" aria-label="Preview navigation">
+          <strong>Acme</strong>
+          <span className="active">Dashboard</span>
+          <span>Projects</span>
+          <span>Reports</span>
+        </aside>
+
+        <div className="preview-main">
+          <div className="preview-toolbar">
+            <div>
+              <span className="preview-kicker">Workspace</span>
+              <h3>Quarterly launch</h3>
+            </div>
+            <div className="preview-actions">
+              <button type="button" className="preview-button secondary">
+                Export
+              </button>
+              <button type="button" className="preview-button primary">
+                New task
+              </button>
+            </div>
+          </div>
+
+          <div className="preview-card-grid">
+            <article className="preview-card">
+              <span>Revenue</span>
+              <strong>$48.2k</strong>
+              <div className="preview-meter">
+                <span style={{ width: '74%' }} />
+              </div>
+            </article>
+            <article className="preview-card">
+              <span>Active users</span>
+              <strong>12,840</strong>
+              <div className="preview-meter">
+                <span style={{ width: '58%' }} />
+              </div>
+            </article>
+            <article className="preview-card">
+              <span>Conversion</span>
+              <strong>8.7%</strong>
+              <div className="preview-meter">
+                <span style={{ width: '42%' }} />
+              </div>
+            </article>
+          </div>
+
+          <div className="preview-form-row">
+            <label>
+              <span>Email</span>
+              <input type="email" value="team@example.com" readOnly />
+            </label>
+            <label className="preview-check">
+              <input type="checkbox" defaultChecked />
+              <span>Send weekly report</span>
+            </label>
+            <span className="preview-pill">Live</span>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -247,6 +343,8 @@ function App() {
           ))}
         </div>
       </section>
+
+      <AppPreview shades={shades} />
 
       <section className="workspace" aria-label="Generated shades">
         <div className="palette-grid">
