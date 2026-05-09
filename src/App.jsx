@@ -4,8 +4,10 @@ import './App.css'
 const MIN_SHADES = 2
 const MAX_SHADES = 24
 
-const initialStart = { h: 204, s: 72, l: 46 }
-const initialEnd = { h: 16, s: 88, l: 58 }
+const initialHue = 204
+const initialLightShade = { s: 38, l: 94 }
+const initialDarkShade = { s: 86, l: 20 }
+const MAX_MID_SATURATION_BOOST = 10
 
 function clamp(value, min, max) {
   return Math.min(Math.max(Number(value) || 0, min), max)
@@ -19,31 +21,33 @@ function round(value) {
   return Math.round(value)
 }
 
-function getHueDelta(start, end, mode) {
-  const direct = end - start
-
-  if (mode === 'clockwise') {
-    return direct >= 0 ? direct : direct + 360
-  }
-
-  if (mode === 'counterclockwise') {
-    return direct <= 0 ? direct : direct - 360
-  }
-
-  return ((direct + 540) % 360) - 180
+function lerp(start, end, ratio) {
+  return start + (end - start) * ratio
 }
 
-function buildPalette(start, end, count, hueMode) {
+function smoothstep(ratio) {
+  return ratio * ratio * (3 - 2 * ratio)
+}
+
+function getSaturationBoost(lightShade, darkShade) {
+  const saturationHeadroom = 100 - Math.max(lightShade.s, darkShade.s)
+
+  return clamp(saturationHeadroom * 0.35, 0, MAX_MID_SATURATION_BOOST)
+}
+
+function buildShades(hue, lightShade, darkShade, count) {
   const steps = clamp(count, MIN_SHADES, MAX_SHADES)
-  const hueDelta = getHueDelta(start.h, end.h, hueMode)
+  const saturationBoost = getSaturationBoost(lightShade, darkShade)
 
   return Array.from({ length: steps }, (_, index) => {
     const ratio = steps === 1 ? 0 : index / (steps - 1)
+    const easedRatio = smoothstep(ratio)
+    const midBoost = saturationBoost * Math.sin(Math.PI * ratio)
 
     return {
-      h: normalizeHue(start.h + hueDelta * ratio),
-      s: round(start.s + (end.s - start.s) * ratio),
-      l: round(start.l + (end.l - start.l) * ratio),
+      h: normalizeHue(hue),
+      s: round(clamp(lerp(lightShade.s, darkShade.s, easedRatio) + midBoost, 0, 100)),
+      l: round(lerp(lightShade.l, darkShade.l, easedRatio)),
     }
   })
 }
@@ -77,12 +81,8 @@ function hslToHex(color) {
     .join('')}`
 }
 
-function updateColorValue(color, key, value) {
-  if (key === 'h') {
-    return { ...color, h: normalizeHue(value) }
-  }
-
-  return { ...color, [key]: clamp(value, 0, 100) }
+function updateShadeValue(shade, key, value) {
+  return { ...shade, [key]: clamp(value, 0, 100) }
 }
 
 function HslField({ label, max, unit = '', value, onChange }) {
@@ -113,7 +113,9 @@ function HslField({ label, max, unit = '', value, onChange }) {
   )
 }
 
-function HslControlGroup({ title, color, onChange, compact = false }) {
+function ShadeControlGroup({ title, hue, shade, onChange, compact = false }) {
+  const color = { ...shade, h: hue }
+
   return (
     <fieldset className={compact ? 'hsl-group compact' : 'hsl-group'}>
       <legend>{title}</legend>
@@ -122,24 +124,18 @@ function HslControlGroup({ title, color, onChange, compact = false }) {
       </div>
       <div className="hsl-inputs">
         <HslField
-          label="Hue"
-          max={359}
-          value={color.h}
-          onChange={(value) => onChange(updateColorValue(color, 'h', value))}
-        />
-        <HslField
           label="Sat"
           max={100}
           unit="%"
-          value={color.s}
-          onChange={(value) => onChange(updateColorValue(color, 's', value))}
+          value={shade.s}
+          onChange={(value) => onChange(updateShadeValue(shade, 's', value))}
         />
         <HslField
           label="Light"
           max={100}
           unit="%"
-          value={color.l}
-          onChange={(value) => onChange(updateColorValue(color, 'l', value))}
+          value={shade.l}
+          onChange={(value) => onChange(updateShadeValue(shade, 'l', value))}
         />
       </div>
     </fieldset>
@@ -147,13 +143,13 @@ function HslControlGroup({ title, color, onChange, compact = false }) {
 }
 
 function App() {
-  const [startColor, setStartColor] = useState(initialStart)
-  const [endColor, setEndColor] = useState(initialEnd)
+  const [hue, setHue] = useState(initialHue)
+  const [lightShade, setLightShade] = useState(initialLightShade)
+  const [darkShade, setDarkShade] = useState(initialDarkShade)
   const [shadeCount, setShadeCount] = useState(8)
-  const [hueMode, setHueMode] = useState('shortest')
   const [copied, setCopied] = useState('')
   const [shades, setShades] = useState(() =>
-    buildPalette(initialStart, initialEnd, 8, 'shortest'),
+    buildShades(initialHue, initialLightShade, initialDarkShade, 8),
   )
 
   const gradient = useMemo(
@@ -164,13 +160,16 @@ function App() {
   const cssTokens = useMemo(
     () =>
       shades
-        .map((shade, index) => `--shade-${String(index + 1).padStart(2, '0')}: ${hslString(shade)};`)
+        .map(
+          (shade, index) =>
+            `--shade-${String(index + 1).padStart(2, '0')}: ${hslString(shade)};`,
+        )
         .join('\n'),
     [shades],
   )
 
   function generatePalette() {
-    setShades(buildPalette(startColor, endColor, shadeCount, hueMode))
+    setShades(buildShades(hue, lightShade, darkShade, shadeCount))
     setCopied('')
   }
 
@@ -190,7 +189,7 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">HSL shade system</p>
+          <p className="eyebrow">Fixed-hue shade system</p>
           <h1>HSL Shade Lab</h1>
         </div>
         <div className="top-actions">
@@ -205,10 +204,21 @@ function App() {
 
       <section className="control-band" aria-label="Palette controls">
         <div className="endpoint-grid">
-          <HslControlGroup title="Start" color={startColor} onChange={setStartColor} />
-          <HslControlGroup title="End" color={endColor} onChange={setEndColor} />
+          <ShadeControlGroup
+            title="Light"
+            hue={hue}
+            shade={lightShade}
+            onChange={setLightShade}
+          />
+          <ShadeControlGroup title="Dark" hue={hue} shade={darkShade} onChange={setDarkShade} />
           <fieldset className="generation-panel">
             <legend>Range</legend>
+            <HslField
+              label="Hue"
+              max={359}
+              value={hue}
+              onChange={(value) => setHue(normalizeHue(value))}
+            />
             <label className="count-control" htmlFor="shade-count">
               <span>Shades</span>
               <input
@@ -228,18 +238,6 @@ function App() {
                   setShadeCount(clamp(event.target.value, MIN_SHADES, MAX_SHADES))
                 }
               />
-            </label>
-            <label className="select-control" htmlFor="hue-mode">
-              <span>Hue path</span>
-              <select
-                id="hue-mode"
-                value={hueMode}
-                onChange={(event) => setHueMode(event.target.value)}
-              >
-                <option value="shortest">Shortest</option>
-                <option value="clockwise">Clockwise</option>
-                <option value="counterclockwise">Counterclockwise</option>
-              </select>
             </label>
           </fieldset>
         </div>
@@ -273,9 +271,10 @@ function App() {
                 <strong>{hslToHex(shade)}</strong>
                 <span>{hslString(shade)}</span>
               </div>
-              <HslControlGroup
+              <ShadeControlGroup
                 title={`Tune ${String(index + 1).padStart(2, '0')}`}
-                color={shade}
+                hue={shade.h}
+                shade={shade}
                 compact
                 onChange={(nextColor) => updateShade(index, nextColor)}
               />

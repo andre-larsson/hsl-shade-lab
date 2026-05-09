@@ -1,6 +1,8 @@
 # HSL Shade Lab
 
-A compact GitHub Pages app for generating HSL shade ranges from a start color to an end color, then manually tuning each generated shade.
+A compact GitHub Pages app for generating fixed-hue HSL shade ranges from light
+and dark saturation/lightness endpoints, then manually tuning each generated
+shade.
 
 ## Development
 
